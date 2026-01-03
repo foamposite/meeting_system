@@ -1,0 +1,8 @@
+{
+    "camera_id": 0,
+    "resolution": [1280, 720],
+    "threshold": 0.5,
+    "db_folder": "database_images",
+    "db_file": "face_db.pkl",
+    "log_file": "checkin_log.csv"
+}

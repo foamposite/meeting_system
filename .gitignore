@@ -1,0 +1,23 @@
+# --- 忽略模型文件 ---
+models/
+database_images/
+*.zip
+*.onnx
+
+# --- 忽略编译生成的临时文件 ---
+build/
+dist/
+__pycache__/
+*.spec
+*.pkg
+
+# --- 忽略 Linux 可执行文件 (根据报错，你有一个叫 main 的文件) ---
+main
+
+# --- 忽略 IDE 配置 ---
+.vscode/
+.idea/
+
+# --- 忽略测试用图片及储存结果 ---
+*.jpg
+*.csv

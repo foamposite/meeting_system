@@ -1,0 +1,7 @@
+numpy<2.0
+opencv-python
+insightface
+onnxruntime
+scikit-learn
+pillow
+pyinstaller

@@ -1,0 +1,15 @@
+name: meeting_system
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.9
+  - pip
+  - pip:
+    - cython
+    - numpy<2.0            # InsightFace 目前对 numpy 2.0 兼容性一般，锁定旧版更稳
+    - insightface>=0.7.3
+    - onnxruntime          # 纯 CPU 版本
+    - opencv-python
+    - scikit-learn
+    - pandas
