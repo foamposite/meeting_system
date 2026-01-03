@@ -255,40 +255,72 @@ class AttendanceApp:
             messagebox.showwarning("提示", "请先打开摄像头")
             return
             
-        frame = self.current_frame.copy()
+        # --- 关键策略：复制两份图片 ---
+        # frame_to_show: 用于弹窗显示（只画名字，界面清爽）
+        frame_to_show = self.current_frame.copy()
+        
+        # frame_to_save: 用于本地保存（画名字+置信度，证据详实）
+        frame_to_save = self.current_frame.copy()
         
         self.status_label.config(text="正在识别中...")
         self.root.update()
         
-        results = self.system.recognize(frame)
+        # 1. 运行识别（只识别一次）
+        results = self.system.recognize(self.current_frame)
         
         names = []
         for (bbox, name, score) in results:
             x1, y1, x2, y2 = bbox
-            # 颜色：已知绿色，未知红色
-            # 注意：PIL 使用 RGB，OpenCV 使用 BGR。
-            # 这里我们统一定义为 (0, 255, 0) 这种元组，但在 cv2.rectangle 需要 BGR
-            color_cv = (0, 255, 0) if name != "Unknown" else (0, 0, 255) # BGR: Green
-            color_pil = (0, 255, 0) if name != "Unknown" else (255, 0, 0) # RGB: Green
             
-            # 画框 (OpenCV画框比较快，继续用CV)
-            cv2.rectangle(frame, (x1, y1), (x2, y2), color_cv, 2)
+            # 颜色设置
+            color_cv = (0, 255, 0) if name != "Unknown" else (0, 0, 255) # BGR
+            color_pil = (0, 255, 0) if name != "Unknown" else (255, 0, 0) # RGB
             
-            # --- [修改点 2] 使用 PIL 绘制中文名字 ---
-            # 原来的 cv2.putText 改为调用 self.draw_chinese_text
-            display_text = f"{name} ({score:.2f})"
-            frame = self.draw_chinese_text(frame, display_text, (x1, y1 - 25), color_pil, 20)
+            # --- 分别绘制 ---
+            
+            # A. 处理【显示用】图片 (不带分数)
+            cv2.rectangle(frame_to_show, (x1, y1), (x2, y2), color_cv, 2)
+            if name != "Unknown":
+                text_simple = f"{name}" # 只显示名字
+            else:
+                text_simple = "Unknown"
+            frame_to_show = self.draw_chinese_text(frame_to_show, text_simple, (x1, y1 - 25), color_pil, 20)
+            
+            # B. 处理【保存用】图片 (带分数)
+            cv2.rectangle(frame_to_save, (x1, y1), (x2, y2), color_cv, 2)
+            text_full = f"{name} ({score:.2f})" # 显示名字 + 分数
+            frame_to_save = self.draw_chinese_text(frame_to_save, text_full, (x1, y1 - 25), color_pil, 20)
 
             if name != "Unknown": names.append(name)
         
+        # 2. 保存日志 (CSV)
         self.system.save_log(names)
         
-        # 弹窗显示结果图
-        result_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        # 3. 保存现场照片 (使用的是 frame_to_save)
+        try:
+            photo_dir = os.path.join(base_path, "attendance_photos")
+            if not os.path.exists(photo_dir):
+                os.makedirs(photo_dir)
+            
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            filename = f"{timestamp}.jpg"
+            filepath = os.path.join(photo_dir, filename)
+            
+            # 保存带有分数的详细图片
+            success, img_encoded = cv2.imencode('.jpg', frame_to_save)
+            if success:
+                img_encoded.tofile(filepath)
+                print(f"[INFO] 证据照片已保存: {filepath}")
+        except Exception as e:
+            print(f"[ERROR] 照片保存失败: {e}")
+
+        # 4. 弹窗显示结果 (使用的是 frame_to_show)
+        result_rgb = cv2.cvtColor(frame_to_show, cv2.COLOR_BGR2RGB)
         result_win = tk.Toplevel(self.root)
         result_win.title(f"签到结果: {len(names)} 人成功")
         
         img = Image.fromarray(result_rgb)
+        # 适当缩放弹窗大小
         img = img.resize((800, 450))
         imgtk = ImageTk.PhotoImage(image=img)
         lbl = tk.Label(result_win, image=imgtk)
