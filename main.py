@@ -10,8 +10,9 @@ import json
 import threading
 import tkinter as tk
 from tkinter import ttk, messagebox
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageDraw, ImageFont # 确保引入 ImageDraw, ImageFont
 from sklearn.preprocessing import normalize
+import platform
 
 # --- 1. 路径与配置工具函数 ---
 
@@ -77,7 +78,7 @@ class FaceSystem:
         return False
 
     def register_faces(self):
-        """重新扫描文件夹并生成底库"""
+        """重新扫描文件夹并生成底库 (支持中文路径)"""
         if not os.path.exists(self.db_folder):
             os.makedirs(self.db_folder)
             return 0, "文件夹不存在，已创建"
@@ -86,19 +87,38 @@ class FaceSystem:
         names_list = []
         count = 0
 
+        print(f"[INFO] 正在扫描: {self.db_folder}")
+
         for filename in os.listdir(self.db_folder):
             if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+                # 1. 提取中文名字
                 name = os.path.splitext(filename)[0]
                 img_path = os.path.join(self.db_folder, filename)
-                img = cv2.imread(img_path)
-                if img is None: continue
                 
+                # --- [修改点 1] 使用 numpy + imdecode 读取中文路径图片 ---
+                try:
+                    # np.fromfile 支持中文路径读取二进制流
+                    img_data = np.fromfile(img_path, dtype=np.uint8)
+                    # cv2.imdecode 将二进制流解码为 OpenCV 图像
+                    img = cv2.imdecode(img_data, cv2.IMREAD_COLOR)
+                except Exception as e:
+                    print(f"读取失败 {filename}: {e}")
+                    continue
+                
+                if img is None:
+                    print(f"[WARN] 无法解码图片: {filename}")
+                    continue
+                
+                # 2. 检测人脸
                 faces = self.app.get(img)
                 if len(faces) == 1:
                     embedding = faces[0].embedding
                     embeddings_list.append(embedding)
                     names_list.append(name)
                     count += 1
+                    print(f"[SUCCESS] 录入: {name}")
+                else:
+                    print(f"[SKIP] {name}: 未检测到人脸或有多张脸")
         
         if embeddings_list:
             self.known_embeddings = normalize(np.array(embeddings_list))
@@ -203,30 +223,64 @@ class AttendanceApp:
                 
             self.root.after(30, self.update_frame) # 33ms刷新一次 (~30fps)
 
+    # --- 新增辅助函数：绘制中文 ---
+    def draw_chinese_text(self, img_cv, text, position, color=(0, 255, 0), text_size=20):
+        """
+        img_cv: OpenCV图片 (BGR)
+        text: 中文字符串
+        position: (x, y)
+        color: RGB颜色
+        """
+        # 1. OpenCV BGR -> PIL RGB
+        img_pil = Image.fromarray(cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB))
+        draw = ImageDraw.Draw(img_pil)
+        
+        # 2. 加载中文字体 (Windows下默认使用微软雅黑)
+        try:
+            # 这里的路径是 Windows 的标准字体路径
+            font = ImageFont.truetype("msyh.ttc", text_size)
+        except:
+            # 如果找不到微软雅黑，回退到默认字体（可能不支持中文）
+            font = ImageFont.load_default()
+        
+        # 3. 绘制文字
+        draw.text(position, text, font=font, fill=color)
+        
+        # 4. PIL RGB -> OpenCV BGR
+        return cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
+
+    # --- 修改 check_in 函数 ---
     def check_in(self):
         if not self.is_camera_on or not hasattr(self, 'current_frame'):
             messagebox.showwarning("提示", "请先打开摄像头")
             return
             
-        # 暂停画面一瞬间
         frame = self.current_frame.copy()
         
-        # 运行识别
         self.status_label.config(text="正在识别中...")
         self.root.update()
         
         results = self.system.recognize(frame)
         
-        # 绘制结果并弹窗显示
         names = []
         for (bbox, name, score) in results:
             x1, y1, x2, y2 = bbox
-            color = (0, 255, 0) if name != "Unknown" else (0, 0, 255)
-            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-            cv2.putText(frame, f"{name}", (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
+            # 颜色：已知绿色，未知红色
+            # 注意：PIL 使用 RGB，OpenCV 使用 BGR。
+            # 这里我们统一定义为 (0, 255, 0) 这种元组，但在 cv2.rectangle 需要 BGR
+            color_cv = (0, 255, 0) if name != "Unknown" else (0, 0, 255) # BGR: Green
+            color_pil = (0, 255, 0) if name != "Unknown" else (255, 0, 0) # RGB: Green
+            
+            # 画框 (OpenCV画框比较快，继续用CV)
+            cv2.rectangle(frame, (x1, y1), (x2, y2), color_cv, 2)
+            
+            # --- [修改点 2] 使用 PIL 绘制中文名字 ---
+            # 原来的 cv2.putText 改为调用 self.draw_chinese_text
+            display_text = f"{name} ({score:.2f})"
+            frame = self.draw_chinese_text(frame, display_text, (x1, y1 - 25), color_pil, 20)
+
             if name != "Unknown": names.append(name)
         
-        # 保存日志
         self.system.save_log(names)
         
         # 弹窗显示结果图
@@ -235,7 +289,7 @@ class AttendanceApp:
         result_win.title(f"签到结果: {len(names)} 人成功")
         
         img = Image.fromarray(result_rgb)
-        img = img.resize((800, 450)) # 弹窗稍微小一点
+        img = img.resize((800, 450))
         imgtk = ImageTk.PhotoImage(image=img)
         lbl = tk.Label(result_win, image=imgtk)
         lbl.image = imgtk
