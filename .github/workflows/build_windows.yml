@@ -1,4 +1,4 @@
-name: Build Windows EXE
+name: Build Windows EXE (Extreme Fast Startup)
 
 on:
   push:
@@ -22,15 +22,14 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    # --- 关键修改：去掉了 --onefile ---
-    - name: Build with PyInstaller (Directory Mode)
+    # --- 🌟 核心提速魔法区域 🌟 ---
+    - name: Build with PyInstaller (Optimized Directory Mode)
       run: |
-        pyinstaller --noconsole --name=MeetingCheckIn --collect-all insightface --collect-all onnxruntime main.py
+        python -OO -m PyInstaller --noupx --noconsole --name=MeetingCheckIn --exclude-module torch --exclude-module matplotlib --exclude-module scipy --exclude-module PyQt5 --exclude-module PySide2 --collect-all insightface --collect-all onnxruntime main.py
 
-    # 由于不再是单个 exe，我们需要把整个生成的文件夹打个 zip 包上传
+    # 提取生成的优化版文件夹
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: MeetingSystem_Windows_Release
-        # 文件夹模式下，所有东西都在 dist/MeetingCheckIn 目录下
+        name: MeetingSystem_Windows_Release_Optimized
         path: dist/MeetingCheckIn/
