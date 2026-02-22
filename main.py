@@ -367,16 +367,42 @@ class AttendanceApp:
         self.root.destroy()
 
 if __name__ == "__main__":
-    print("Initializing system...")
-    # Ensure high DPI awareness for Windows (makes text clearer)
+    # 解决 Windows 缩放模糊问题
     try:
         from ctypes import windll
         windll.shcore.SetProcessDpiAwareness(1)
     except:
         pass
 
-    face_sys = FaceSystem()
+    print("启动 UI 界面...")
     root = tk.Tk()
-    app = AttendanceApp(root, face_sys)
+    
+    # 1. 此时不传入 face_sys，先让界面弹出来
+    app = AttendanceApp(root, system=None) 
+    
+    # 锁定所有需要 AI 的按钮
+    app.btn_snap.config(state=tk.DISABLED)
+    # 给所有按钮加上一个初始禁用状态（需要在 AttendanceApp 中临时处理一下）
+    
+    def background_load_ai():
+        """在后台线程加载 AI 模型，防止主界面卡死"""
+        app.status_var.set("正在初始化 AI 模型引擎，请稍候... (约需 3-5 秒)")
+        try:
+            # 耗时操作：加载模型和数据库
+            face_sys = FaceSystem()
+            # 加载完成后，赋值给 app
+            app.system = face_sys
+            # 解除提示
+            app.status_var.set("系统就绪。请选择上方打卡模式开始。")
+            print("AI 模型加载完毕！")
+        except Exception as e:
+            app.status_var.set(f"AI 模型加载失败: {e}")
+            messagebox.showerror("致命错误", f"模型加载失败，请检查 models 文件夹是否存在。\n详细报错: {e}")
+
+    # 2. 开启后台线程加载 AI
+    ai_thread = threading.Thread(target=background_load_ai, daemon=True)
+    ai_thread.start()
+
+    # 3. 瞬间进入 UI 主循环，界面秒开
     root.protocol("WM_DELETE_WINDOW", app.on_closing)
     root.mainloop()
