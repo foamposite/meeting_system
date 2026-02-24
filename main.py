@@ -8,6 +8,10 @@ import threading
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 
+import cv2
+import numpy as np
+from PIL import Image, ImageTk, ImageDraw, ImageFont
+
 class NullWriter:
     def write(self, text): pass
     def flush(self): pass
@@ -124,7 +128,7 @@ class AttendanceApp:
     def __init__(self, root, system=None):
         self.root = root
         self.system = system 
-        self.root.title("会议签到系统 专业版 (多摄切换)")
+        self.root.title("会议签到系统")
         self.root.geometry("1000x700")
         
         self.is_camera_on = False
@@ -145,7 +149,7 @@ class AttendanceApp:
         control_frame.pack(side=tk.TOP, fill=tk.X, padx=10, pady=5)
         
         # --- 模式一：实时监控区域 (改造) ---
-        ttk.Label(control_frame, text="模式一：实时监控").pack(side=tk.LEFT, padx=(5, 5))
+        ttk.Label(control_frame, text="模式一：视频签到").pack(side=tk.LEFT, padx=(5, 5))
         
         # 1. 新增摄像头下拉选择框
         self.camera_combo = ttk.Combobox(control_frame, width=15, state="readonly")
@@ -165,7 +169,7 @@ class AttendanceApp:
         ttk.Separator(control_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=20)
         
         # --- 模式二：照片上传 ---
-        ttk.Label(control_frame, text="模式二：照片上传").pack(side=tk.LEFT, padx=(10, 10))
+        ttk.Label(control_frame, text="模式二：照片签到").pack(side=tk.LEFT, padx=(10, 10))
         ttk.Button(control_frame, text="上传合影", command=self.upload_and_check_in).pack(side=tk.LEFT, padx=5)
         
         # --- 右侧功能 ---
@@ -176,7 +180,7 @@ class AttendanceApp:
         status_bar = ttk.Label(self.root, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W, padding=(5, 2))
         status_bar.pack(side=tk.BOTTOM, fill=tk.X)
 
-        self.video_frame = ttk.Label(self.root, text="实时监控画面或上传的照片将显示在此处", relief=tk.RIDGE, anchor=tk.CENTER)
+        self.video_frame = ttk.Label(self.root, text="实时摄像头画面或上传的照片将显示在此处", relief=tk.RIDGE, anchor=tk.CENTER)
         self.video_frame.pack(expand=True, fill=tk.BOTH, padx=10, pady=10)
 
     # --- 新增：自动搜索可用摄像头 ---
@@ -415,14 +419,14 @@ if __name__ == "__main__":
         try:
             app.status_var.set("正在导入视觉算法库 (这可能需要几秒钟)...")
             
-            # 🌟 核心魔法：在这里导入重型武器，就不会卡住 UI 了 🌟
-            global cv2, np, insightface, FaceAnalysis, Image, ImageTk, ImageDraw, ImageFont, normalize
-            import cv2
-            import numpy as np
+            # --- ✅ 修正点 2：这里只导入原本最慢的库 ---
+            # cv2, np, PIL 已经在上面导入了，这里不需要再 import
+            
+            # 🌟 核心魔法：只在这里导入 InsightFace 和 sklearn 🌟
+            global insightface, FaceAnalysis, normalize
             import insightface
             from insightface.app import FaceAnalysis
-            from PIL import Image, ImageTk, ImageDraw, ImageFont
-            from sklearn.preprocessing import normalize
+            from sklearn.preprocessing import normalize # sklearn 也比较慢，建议留在这里
             
             app.status_var.set("正在初始化 AI 模型，即将完成...")
             face_sys = FaceSystem() # 初始化模型
