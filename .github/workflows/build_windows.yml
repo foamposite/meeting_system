@@ -1,4 +1,4 @@
-name: Build Windows EXE (Extreme Fast Startup)
+name: Build Windows EXE (Final Stable & Fast)
 
 on:
   push:
@@ -22,14 +22,19 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    # --- 🌟 核心提速魔法区域 🌟 ---
-    - name: Build with PyInstaller (Optimized Directory Mode)
+    # --- 最终构建命令 ---
+    # 1. --noconsole: 隐藏黑色命令行窗口 (注意：main.py 必须有 NullWriter 类防止崩溃)
+    # 2. --noupx: 不使用 UPX 压缩，牺牲体积换取最快的启动速度
+    # 3. --collect-all: 强制把 insightface 和 onnxruntime 的所有依赖都带上，防止报错
+    # 4. 移除了所有 --exclude-module: 确保 scipy/sklearn 等库完整保留，保证稳定性
+    - name: Build with PyInstaller (Directory Mode)
       run: |
-        python -OO -m PyInstaller --noupx --noconsole --name=MeetingCheckIn --exclude-module torch --exclude-module matplotlib --exclude-module scipy --exclude-module PyQt5 --exclude-module PySide2 --collect-all insightface --collect-all onnxruntime main.py
+        pyinstaller --noconsole --noupx --name=MeetingCheckIn --collect-all insightface --collect-all onnxruntime main.py
 
-    # 提取生成的优化版文件夹
+    # --- 上传产物 ---
+    # 上传整个 dist/MeetingCheckIn 文件夹作为 ZIP 包
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: MeetingSystem_Windows_Release_Optimized
+        name: MeetingSystem_Windows_Final
         path: dist/MeetingCheckIn/
